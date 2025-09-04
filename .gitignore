@@ -132,6 +132,9 @@ custom_models/
 test_models/
 *.safetensors
 
+# Data files
+infer/data/
+
 # Output files
 outputs/
 *.pkl
