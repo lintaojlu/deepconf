@@ -5,7 +5,7 @@ import os
 def excel_to_jsonl(excel_path, output_path):
     """
     将Excel文件转换为JSONL格式
-    
+
     Args:
         excel_path (str): Excel文件路径
         output_path (str): 输出JSONL文件路径
@@ -13,62 +13,62 @@ def excel_to_jsonl(excel_path, output_path):
     # 读取Excel文件
     print(f"正在读取Excel文件: {excel_path}")
     df = pd.read_excel(excel_path)
-    
+
     print(f"原始数据行数: {len(df)}")
-    
-    # 筛选条件：策略gsb为B的行，或者策略打分大于等于2且策略gsb为G或S的行
-    condition = (df['策略gsb'] == 'B') | ((df['策略打分'] >= 2) & (df['策略gsb'].isin(['G', 'S'])))
-    filtered_df = df[condition].copy()
-    print(f"筛选后数据行数: {len(filtered_df)}")
-    
-    # 显示筛选统计信息
-    print(f"策略gsb分布（原始数据）: {df['策略gsb'].value_counts().to_dict()}")
-    print(f"策略gsb分布（筛选后）: {filtered_df['策略gsb'].value_counts().to_dict()}")
-    
+
+    # 显示策略gsb分布统计信息
+    print(f"策略gsb分布（原始数据）: {df['策略gsb'].value_counts(dropna=False).to_dict()}")
+
     # 检查必要的列是否存在
-    required_columns = ['query', '联网判断', 'dismantle', 'teg_subqs']
+    required_columns = ['query', '联网判断', 'dismantle', 'teg_subqs', '策略gsb', '策略打分']
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         raise ValueError(f"缺少必要的列: {missing_columns}")
-    
+
     # 处理数据并生成JSONL格式
     jsonl_data = []
-    
-    for index, row in filtered_df.iterrows():
+
+    for index, row in df.iterrows():
         # 获取question（query列）
         question = str(row['query']).strip() if pd.notna(row['query']) else ""
-        
+
         # 获取联网判断列的值
         net_value = str(row['联网判断']).strip() if pd.notna(row['联网判断']) else ""
-        
-        # 根据策略gsb选择dismantle内容
-        if row['策略gsb'] == 'B':
-            # 策略gsb为B时，使用teg_subqs列的内容
-            dismantle_value = str(row['teg_subqs']).strip() if pd.notna(row['teg_subqs']) else ""
+
+        # 获取策略gsb和策略打分
+        gsb = str(row['策略gsb']).strip() if pd.notna(row['策略gsb']) else ""
+        score = row['策略打分'] if pd.notna(row['策略打分']) else None
+
+        # 处理answer内容
+        if score is not None and score >= 2:
+            if gsb in ['G', 'S']:
+                dismantle_value = str(row['dismantle']).strip() if pd.notna(row['dismantle']) else ""
+            elif gsb == 'B' or gsb == '':
+                dismantle_value = str(row['teg_subqs']).strip() if pd.notna(row['teg_subqs']) else ""
+            else:
+                dismantle_value = ""
+            answer = f"<net>{net_value}</net><dismantle>{dismantle_value}</dismantle>"
         else:
-            # 策略gsb为G或S时，使用dismantle列的内容
-            dismantle_value = str(row['dismantle']).strip() if pd.notna(row['dismantle']) else ""
-        
-        # 构建answer格式：<net>是否联网</net><dismantle>拆解内容</dismantle>
-        answer = f"<net>{net_value}</net><dismantle>{dismantle_value}</dismantle>"
-        
+            # 分数小于2，truth直接设置为空
+            answer = ""
+
         # 创建JSON对象
         json_obj = {
             "question": question,
             "answer": answer
         }
-        
+
         jsonl_data.append(json_obj)
-    
+
     # 写入JSONL文件
     print(f"正在写入JSONL文件: {output_path}")
     with open(output_path, 'w', encoding='utf-8') as f:
         for json_obj in jsonl_data:
             f.write(json.dumps(json_obj, ensure_ascii=False) + '\n')
-    
+
     print(f"转换完成！共处理了 {len(jsonl_data)} 条记录")
     print(f"输出文件: {output_path}")
-    
+
     return len(jsonl_data)
 
 def main():

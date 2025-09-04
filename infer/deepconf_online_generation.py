@@ -9,6 +9,7 @@ from collections import Counter
 import pickle
 # from  dynasor.core.evaluator import math_equal
 import re
+import pandas as pd
 from sentence_transformer_utils import SentenceTransformerSimilarity
 
 # ===========================
@@ -320,22 +321,19 @@ def calculate_statistics(traces, phase_name=""):
     return stats
 
 # ===========================
-# Main Function
+# Process Single Question Function
 # ===========================
-def main():
+def process_single_question(data, qid, run_id=0):
+    """Process a single question and return results"""
     print("="*60)
     print("ONLINE ALGORITHM WITH ACCURACY CALCULATION")
     print("="*60)
     print(f"Model: {MODEL_PATH}")
-    print(f"Question ID: {QID}")
-    print(f"Run ID: {RID}")
+    print(f"Question ID: {qid}")
+    print(f"Run ID: {run_id}")
     print(f"Warmup traces: {WARMUP_TRACES}")
     print(f"Total budget: {TOTAL_BUDGET}")
     print(f"Confidence percentile: {CONFIDENCE_PERCENTILE}")
-
-    # Load the data
-    data = load_aime25_jsonl()
-    print(f"Loaded {len(data)} items from {DATASET_FILE}")
 
     # Initialize client
     client = openai.OpenAI(
@@ -345,8 +343,8 @@ def main():
     )
 
     # Get question and ground truth
-    prompt = data[QID]['question']
-    ground_truth = str(data[QID].get('answer', '')).strip()
+    prompt = data[qid]['question']
+    ground_truth = str(data[qid].get('answer', '')).strip()
 
     system_prompt = """你是元宝。观察助手和用户的历史对话,输出当前问题的改写，包括联网和拆解。
 
@@ -598,8 +596,8 @@ def main():
     # SAVE RESULTS
     # ===========================
     results = {
-        "question_id": QID,
-        "run_id": RID,
+        "question_id": qid,
+        "run_id": run_id,
         "question": prompt,
         "ground_truth": ground_truth,
         "conf_bar": conf_bar,
@@ -628,11 +626,11 @@ def main():
     # Save results to JSON file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     os.makedirs("outputs", exist_ok=True)
-    pickle.dump(results, open(f"outputs/q{QID}_r{RID}_{timestamp}.pkl", 'wb'))
-    print(f"Results saved to outputs/q{QID}_r{RID}_{timestamp}.pkl")
-    output_filename = f"outputs/q{QID}_r{RID}_{timestamp}.pkl"
+    pickle.dump(results, open(f"outputs/q{qid}_r{run_id}_{timestamp}.pkl", 'wb'))
+    print(f"Results saved to outputs/q{qid}_r{run_id}_{timestamp}.pkl")
+    output_filename = f"outputs/q{qid}_r{run_id}_{timestamp}.pkl"
 
-    print(f"\n✅ Results saved to outputs/q{QID}_r{RID}_{timestamp}.pkl")
+    print(f"\n✅ Results saved to outputs/q{qid}_r{run_id}_{timestamp}.pkl")
 
     # ===========================
     # COMPARISON WITH BASELINE
@@ -758,7 +756,7 @@ def main():
     print(f"\n{'='*60}")
     print("FINAL SUMMARY")
     print(f"{'='*60}")
-    print(f"Question ID: {QID}")
+    print(f"Question ID: {qid}")
     print(f"Confidence bar: {conf_bar:.4f}")
     print(f"Total traces generated: {len(all_traces)}")
     print(f"Traces used for voting: {len(voting_answers)}")
@@ -770,7 +768,137 @@ def main():
     print(f"Final score: {final_score:.4f}")
     print(f"Final result: {'✅ CORRECT' if is_voted_correct else '❌ INCORRECT'} (threshold: 0.8)")
 
-    return results
+    # Extract net and dismantle parts from voted answer for CSV output
+    voted_net, voted_dismantle = extract_net_dismantle(voted_answer) if voted_answer else (None, None)
+    
+    return {
+        "query": prompt,
+        "truth": ground_truth,
+        "answer": voted_answer,
+        "net": voted_net,
+        "dismantle": voted_dismantle,
+        "net_score": net_score,
+        "dismantle_score": dismantle_score,
+        "final_score": final_score,
+        "is_correct": is_voted_correct,
+        "question_id": qid,
+        "run_id": run_id,
+        "total_traces": len(all_traces),
+        "voting_traces": len(voting_answers),
+        "total_tokens": overall_stats['overall_total_tokens']
+    }
+
+# ===========================
+# Main Function
+# ===========================
+def main():
+    """Main function to process all questions in the dataset"""
+    print("="*60)
+    print("BATCH PROCESSING ALL QUESTIONS")
+    print("="*60)
+    print(f"Model: {MODEL_PATH}")
+    print(f"Dataset: {DATASET_FILE}")
+    print(f"Warmup traces: {WARMUP_TRACES}")
+    print(f"Total budget: {TOTAL_BUDGET}")
+    print(f"Confidence percentile: {CONFIDENCE_PERCENTILE}")
+
+    # Load the data
+    data = load_aime25_jsonl()
+    print(f"Loaded {len(data)} items from {DATASET_FILE}")
+
+    # Initialize results list
+    all_results = []
+    
+    # Process each question
+    for qid in tqdm(range(len(data)), desc="Processing questions"):
+        try:
+            print(f"\n{'='*80}")
+            print(f"Processing Question {qid + 1}/{len(data)}")
+            print(f"{'='*80}")
+            
+            # Process single question
+            result = process_single_question(data, qid, RID)
+            all_results.append(result)
+            
+            print(f"✅ Completed question {qid + 1}/{len(data)}")
+            
+        except Exception as e:
+            print(f"❌ Error processing question {qid}: {e}")
+            # Add error result
+            all_results.append({
+                "query": data[qid].get('question', ''),
+                "truth": data[qid].get('answer', ''),
+                "answer": None,
+                "net": None,
+                "dismantle": None,
+                "net_score": 0.0,
+                "dismantle_score": 0.0,
+                "final_score": 0.0,
+                "is_correct": False,
+                "question_id": qid,
+                "run_id": RID,
+                "total_traces": 0,
+                "voting_traces": 0,
+                "total_tokens": 0,
+                "error": str(e)
+            })
+            continue
+
+    # ===========================
+    # Save Results to CSV
+    # ===========================
+    print(f"\n{'='*60}")
+    print("SAVING RESULTS TO CSV")
+    print(f"{'='*60}")
+    
+    # Create DataFrame
+    df = pd.DataFrame(all_results)
+    
+    # Select columns for CSV output
+    csv_columns = ['query', 'truth', 'answer', 'net', 'dismantle']
+    csv_df = df[csv_columns].copy()
+    
+    # Save to CSV
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"outputs/p2q_results_{timestamp}.csv"
+    csv_df.to_csv(csv_filename, index=False, encoding='utf-8')
+    
+    print(f"✅ CSV results saved to: {csv_filename}")
+    print(f"📊 Processed {len(all_results)} questions")
+    
+    # Save detailed results
+    detailed_filename = f"outputs/p2q_detailed_results_{timestamp}.csv"
+    df.to_csv(detailed_filename, index=False, encoding='utf-8')
+    print(f"✅ Detailed results saved to: {detailed_filename}")
+    
+    # ===========================
+    # Summary Statistics
+    # ===========================
+    print(f"\n{'='*60}")
+    print("SUMMARY STATISTICS")
+    print(f"{'='*60}")
+    
+    successful_results = [r for r in all_results if 'error' not in r]
+    error_count = len(all_results) - len(successful_results)
+    
+    if successful_results:
+        avg_final_score = np.mean([r['final_score'] for r in successful_results])
+        avg_net_score = np.mean([r['net_score'] for r in successful_results])
+        avg_dismantle_score = np.mean([r['dismantle_score'] for r in successful_results])
+        correct_count = sum([r['is_correct'] for r in successful_results])
+        total_tokens = sum([r['total_tokens'] for r in successful_results])
+        
+        print(f"Total questions: {len(all_results)}")
+        print(f"Successful: {len(successful_results)}")
+        print(f"Errors: {error_count}")
+        print(f"Accuracy: {correct_count}/{len(successful_results)} ({correct_count/len(successful_results):.2%})")
+        print(f"Average final score: {avg_final_score:.4f}")
+        print(f"Average net score: {avg_net_score:.4f}")
+        print(f"Average dismantle score: {avg_dismantle_score:.4f}")
+        print(f"Total tokens used: {total_tokens:,}")
+        print(f"Average tokens per question: {total_tokens/len(successful_results):.0f}")
+    
+    return all_results
 
 if __name__ == "__main__":
     results = main()
