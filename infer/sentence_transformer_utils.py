@@ -87,6 +87,7 @@ class SentenceTransformerSimilarity:
         # logger.info(f"正在编码 {len(texts)} 个文本...")
         
         # 编码文本
+        print(f"正在编码:\n{texts}\n")
         embeddings = self.model.encode(
             texts,
             convert_to_numpy=True,
