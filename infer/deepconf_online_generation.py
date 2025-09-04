@@ -143,6 +143,7 @@ def calculate_dismantle_mapping_score(voted_dismantle, truth_dismantle):
     permutation_pairs = []
     
     print(f"Generating all possible permutations of truth_parts...")
+    print(f"Permutations: min_len: {min_len}")
     for perm in permutations(truth_parts, min_len):
         perm_pairs = []
         for i in range(min_len):
