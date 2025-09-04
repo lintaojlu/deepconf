@@ -85,17 +85,24 @@ def process_trace(choice, trace_id):
 # ===========================
 # Main Inference Function
 # ===========================
-def deepconf_inference(query):
-    """Perform deepconf inference with warmup and final phases"""
+def deepconf_inference(query, warmup_traces=WARMUP_TRACES, total_budget=TOTAL_BUDGET, confidence_percentile=CONFIDENCE_PERCENTILE):
+    """Perform deepconf inference with warmup and final phases
+    
+    Args:
+        query (str): The input query to process
+        warmup_traces (int): Number of warmup traces to generate
+        total_budget (int): Total budget for traces (warmup + final)
+        confidence_percentile (int): Percentile for confidence threshold
+    """
     
     print("="*60)
     print("DEEPCONF INFERENCE")
     print("="*60)
     print(f"Model: {MODEL_PATH}")
     print(f"Query: {query}")
-    print(f"Warmup traces: {WARMUP_TRACES}")
-    print(f"Total budget: {TOTAL_BUDGET}")
-    print(f"Confidence percentile: {CONFIDENCE_PERCENTILE}")
+    print(f"Warmup traces: {warmup_traces}")
+    print(f"Total budget: {total_budget}")
+    print(f"Confidence percentile: {confidence_percentile}")
 
     # Initialize client
     client = openai.OpenAI(
@@ -175,30 +182,30 @@ def deepconf_inference(query):
         "top_p": 0.95,
         "logprobs": True,
         "top_logprobs": 20,
-        "n": WARMUP_TRACES,
+        "n": warmup_traces,
         "extra_body": {"top_k": 0},
     }
     
     responses = client.chat.completions.create(**warmup_request_params)
 
     # Process warmup traces
-    warmup_traces = []
+    warmup_trace_list = []
     min_confs = []
 
-    for j in range(WARMUP_TRACES):
+    for j in range(warmup_traces):
         trace_data = process_trace(responses.choices[j], j)
-        warmup_traces.append(trace_data)
+        warmup_trace_list.append(trace_data)
         min_confs.append(trace_data["min_conf"])
 
     # Calculate confidence bar
-    conf_bar = float(np.percentile(min_confs, CONFIDENCE_PERCENTILE))
+    conf_bar = float(np.percentile(min_confs, confidence_percentile))
 
-    print(f"Confidence bar (P{CONFIDENCE_PERCENTILE}): {conf_bar:.4f}")
-    print(f"Warmup traces generated: {len(warmup_traces)}")
+    print(f"Confidence bar (P{confidence_percentile}): {conf_bar:.4f}")
+    print(f"Warmup traces generated: {len(warmup_trace_list)}")
 
     # Show some example results
     print(f"\nFirst 3 warmup traces:")
-    for i, trace in enumerate(warmup_traces[:3]):
+    for i, trace in enumerate(warmup_trace_list[:3]):
         print(f"  Trace {i}: conf: {trace['min_conf']:.4f}, tokens: {trace['token_count']}")
 
     # ===========================
@@ -208,7 +215,7 @@ def deepconf_inference(query):
     print("FINAL PHASE (with early stopping)")
     print(f"{'-'*40}")
 
-    real_gen = TOTAL_BUDGET - WARMUP_TRACES
+    real_gen = total_budget - warmup_traces
 
     final_request_params = {
         "model": MODEL_PATH,
@@ -234,7 +241,7 @@ def deepconf_inference(query):
     # Process final traces
     final_traces = []
     for j in range(len(responses.choices)):
-        trace_data = process_trace(responses.choices[j], WARMUP_TRACES + j)
+        trace_data = process_trace(responses.choices[j], warmup_traces + j)
         final_traces.append(trace_data)
 
     print(f"Final traces generated: {len(final_traces)} (requested: {real_gen})")
@@ -251,14 +258,14 @@ def deepconf_inference(query):
     print("VOTING FOR FINAL ANSWER")
     print(f"{'-'*40}")
 
-    all_traces = warmup_traces + final_traces
+    all_traces = warmup_trace_list + final_traces
 
     # Collect answers above threshold for voting
     voting_answers = []
     voting_weights = []
 
     # Add warmup traces above threshold (use confidence as weight)
-    for trace in warmup_traces:
+    for trace in warmup_trace_list:
         minx = trace['min_conf']
         if minx >= conf_bar:
             answer = trace['text']
@@ -305,11 +312,50 @@ def deepconf_inference(query):
 # ===========================
 # Example Usage
 # ===========================
-if __name__ == "__main__":
-    # Define your query here
-    query = "如何学习Python编程？"
+def main(query=None, warmup_traces=None, total_budget=None, confidence_percentile=None):
+    """Main function with configurable parameters"""
+    
+    # Use provided parameters or defaults
+    if query is None:
+        query = "如何学习Python编程？"
+    if warmup_traces is None:
+        warmup_traces = WARMUP_TRACES
+    if total_budget is None:
+        total_budget = TOTAL_BUDGET
+    if confidence_percentile is None:
+        confidence_percentile = CONFIDENCE_PERCENTILE
+    
+    print(f"🔧 Configuration:")
+    print(f"   Query: {query}")
+    print(f"   Warmup traces: {warmup_traces}")
+    print(f"   Total budget: {total_budget}")
+    print(f"   Confidence percentile: {confidence_percentile}")
+    print()
     
     # Run deepconf inference
-    result = deepconf_inference(query)
+    result = deepconf_inference(query, warmup_traces, total_budget, confidence_percentile)
     
     print(f"\n🎯 Final Result: {result}")
+    return result
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='DeepConf Simple Inference')
+    parser.add_argument('--query', '-q', type=str, help='Input query to process')
+    parser.add_argument('--warmup-traces', '-w', type=int, default=WARMUP_TRACES, 
+                        help=f'Number of warmup traces (default: {WARMUP_TRACES})')
+    parser.add_argument('--total-budget', '-t', type=int, default=TOTAL_BUDGET,
+                        help=f'Total budget for traces (default: {TOTAL_BUDGET})')
+    parser.add_argument('--confidence-percentile', '-c', type=int, default=CONFIDENCE_PERCENTILE,
+                        help=f'Confidence percentile (default: {CONFIDENCE_PERCENTILE})')
+    
+    args = parser.parse_args()
+    
+    # Run main function with parsed arguments
+    main(
+        query=args.query,
+        warmup_traces=args.warmup_traces,
+        total_budget=args.total_budget,
+        confidence_percentile=args.confidence_percentile
+    )
