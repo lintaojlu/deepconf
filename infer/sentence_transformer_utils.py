@@ -91,7 +91,7 @@ class SentenceTransformerSimilarity:
             texts,
             convert_to_numpy=True,
             normalize_embeddings=normalize,
-            show_progress_bar=True
+            show_progress_bar=False  # 关闭进度条，减少输出
         )
         
         # logger.info(f"✅ 编码完成，向量维度: {embeddings.shape}")
