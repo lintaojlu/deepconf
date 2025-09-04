@@ -136,34 +136,34 @@ def calculate_dismantle_mapping_score(voted_dismantle, truth_dismantle):
     
     best_avg_score = 0.0
     
-    # Collect all text pairs for batch processing
-    all_text_pairs = []
-    permutation_indices = []
+    # Collect all unique text pairs for batch processing
+    unique_pairs = set()
+    permutation_pairs = []
     
-    for perm_idx, perm in enumerate(permutations(truth_parts, min_len)):
-        perm_start_idx = len(all_text_pairs)
-        
-        # Collect text pairs for this permutation
+    for perm in permutations(truth_parts, min_len):
+        perm_pairs = []
         for i in range(min_len):
             voted_part = voted_parts[i]
             truth_part = perm[i]
             
             if voted_part and truth_part:
-                all_text_pairs.append((voted_part, truth_part))
-        
-        # Record which pairs belong to this permutation
-        perm_end_idx = len(all_text_pairs)
-        permutation_indices.append((perm_start_idx, perm_end_idx))
+                pair = (voted_part, truth_part)
+                unique_pairs.add(pair)
+                perm_pairs.append(pair)
+        permutation_pairs.append(perm_pairs)
     
-    # Batch compute all similarities at once
-    if all_text_pairs:
-        all_similarities = sentence_transformer.compute_pairs_similarity(all_text_pairs)
+    # Batch compute similarities for all unique pairs
+    if unique_pairs:
+        unique_pairs_list = list(unique_pairs)
+        unique_similarities = sentence_transformer.compute_pairs_similarity(unique_pairs_list)
+        
+        # Create a mapping from pair to similarity
+        pair_to_similarity = dict(zip(unique_pairs_list, unique_similarities))
         
         # Process results for each permutation
-        for perm_idx, (start_idx, end_idx) in enumerate(permutation_indices):
-            perm_similarities = all_similarities[start_idx:end_idx]
-            
-            if perm_similarities:
+        for perm_pairs in permutation_pairs:
+            if perm_pairs:
+                perm_similarities = [pair_to_similarity[pair] for pair in perm_pairs]
                 avg_score = sum(perm_similarities) / len(perm_similarities)
                 best_avg_score = max(best_avg_score, avg_score)
     
@@ -277,9 +277,6 @@ def process_trace(choice, trace_id, ground_truth):
     extracted_answer = extract_answer(text)
 
     # Calculate correctness using our custom scoring function
-    print(f"extracted_answer: {extracted_answer}")
-    print(f"ground_truth: {ground_truth}")
-    input()
     final_score = 0.0
     if extracted_answer is not None and ground_truth is not None:
         _, _, final_score = calculate_score(extracted_answer, ground_truth)
