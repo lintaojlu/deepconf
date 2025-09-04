@@ -10,6 +10,7 @@ import pickle
 # from  dynasor.core.evaluator import math_equal
 import re
 import pandas as pd
+import signal
 from sentence_transformer_utils import SentenceTransformerSimilarity
 
 # ===========================
@@ -27,6 +28,7 @@ WARMUP_TRACES = 16
 TOTAL_BUDGET = 32
 CONFIDENCE_PERCENTILE = 90
 WINDOW_SIZE = 2048
+REQUEST_TIMEOUT = 120  # 2 minutes timeout for API requests
 
 # Global Sentence Transformer instance
 _sentence_transformer = None
@@ -38,6 +40,48 @@ def get_sentence_transformer():
         _sentence_transformer = SentenceTransformerSimilarity()
         _sentence_transformer.download_model()
     return _sentence_transformer
+
+# ===========================
+# Timeout Handling
+# ===========================
+class TimeoutError(Exception):
+    """Custom timeout exception"""
+    pass
+
+def timeout_handler(signum, frame):
+    """Signal handler for timeout"""
+    raise TimeoutError("Request timed out")
+
+def make_api_request_with_timeout(client, request_params, timeout_seconds=REQUEST_TIMEOUT):
+    """
+    Make API request with timeout handling
+    
+    Args:
+        client: OpenAI client
+        request_params: Parameters for chat.completions.create
+        timeout_seconds: Timeout in seconds
+    
+    Returns:
+        API response or None if timeout
+    """
+    # Set up signal handler for timeout
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(timeout_seconds)
+    
+    try:
+        response = client.chat.completions.create(**request_params)
+        signal.alarm(0)  # Cancel the alarm
+        return response
+    except TimeoutError:
+        print(f"⚠️  API request timed out after {timeout_seconds} seconds")
+        return None
+    except Exception as e:
+        signal.alarm(0)  # Cancel the alarm
+        print(f"❌ API request failed: {e}")
+        return None
+    finally:
+        # Restore the old signal handler
+        signal.signal(signal.SIGALRM, old_handler)
 
 # ===========================
 # Edit Distance and Scoring Functions
@@ -468,18 +512,40 @@ def process_single_question(data, qid, run_id=0):
     print(f"{'-'*40}")
 
     t0 = time.time()
-    responses = client.chat.completions.create(
-        model=MODEL_PATH,
-        messages=messages,
-        max_tokens=MAX_TOKENS,
-        temperature=0.6,
-        top_p=0.95,
-        logprobs=True,
-        top_logprobs=20,
-        n=WARMUP_TRACES,
-        extra_body={"top_k": 0},
-    )
+    warmup_request_params = {
+        "model": MODEL_PATH,
+        "messages": messages,
+        "max_tokens": MAX_TOKENS,
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "logprobs": True,
+        "top_logprobs": 20,
+        "n": WARMUP_TRACES,
+        "extra_body": {"top_k": 0},
+    }
+    responses = make_api_request_with_timeout(client, warmup_request_params)
     t1 = time.time()
+    
+    # Handle timeout case
+    if responses is None:
+        print(f"❌ Warmup phase timed out, skipping question {qid}")
+        return {
+            "query": prompt,
+            "truth": ground_truth,
+            "answer": None,
+            "net": None,
+            "dismantle": None,
+            "net_score": 0.0,
+            "dismantle_score": 0.0,
+            "final_score": 0.0,
+            "is_correct": False,
+            "question_id": qid,
+            "run_id": run_id,
+            "total_traces": 0,
+            "voting_traces": 0,
+            "total_tokens": 0,
+            "timeout": True
+        }
 
     # Process warmup traces
     warmup_traces = []
@@ -518,16 +584,16 @@ def process_single_question(data, qid, run_id=0):
     real_gen = TOTAL_BUDGET - WARMUP_TRACES
 
     t3 = time.time()
-    responses = client.chat.completions.create(
-        model=MODEL_PATH,
-        messages=messages,
-        max_tokens=MAX_TOKENS,
-        temperature=0.6,
-        top_p=0.95,
-        logprobs=True,
-        top_logprobs=20,
-        n=real_gen,
-        extra_body={
+    final_request_params = {
+        "model": MODEL_PATH,
+        "messages": messages,
+        "max_tokens": MAX_TOKENS,
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "logprobs": True,
+        "top_logprobs": 20,
+        "n": real_gen,
+        "extra_body": {
             "top_k": 0,
             "vllm_xargs": {
                 'enable_conf': True,
@@ -535,14 +601,18 @@ def process_single_question(data, qid, run_id=0):
                 'threshold': conf_bar
             }
         }
-    )
+    }
+    responses = make_api_request_with_timeout(client, final_request_params)
     t4 = time.time()
-
+    
     # Process final traces
     final_traces = []
-    for j in range(len(responses.choices)):
-        trace_data = process_trace(responses.choices[j], WARMUP_TRACES + j, ground_truth)
-        final_traces.append(trace_data)
+    if responses is not None:
+        for j in range(len(responses.choices)):
+            trace_data = process_trace(responses.choices[j], WARMUP_TRACES + j, ground_truth)
+            final_traces.append(trace_data)
+    else:
+        print(f"❌ Final phase timed out, using warmup results only for question {qid}")
 
     # Calculate final statistics
     final_stats = calculate_statistics(final_traces, "final")
@@ -840,7 +910,8 @@ def main():
                 "total_traces": 0,
                 "voting_traces": 0,
                 "total_tokens": 0,
-                "error": str(e)
+                "error": str(e),
+                "timeout": False
             })
             continue
 
@@ -881,8 +952,12 @@ def main():
     print("SUMMARY STATISTICS")
     print(f"{'='*60}")
     
-    successful_results = [r for r in all_results if 'error' not in r]
-    error_count = len(all_results) - len(successful_results)
+    successful_results = [r for r in all_results if 'error' not in r and not r.get('timeout', False)]
+    error_results = [r for r in all_results if 'error' in r]
+    timeout_results = [r for r in all_results if r.get('timeout', False)]
+    
+    error_count = len(error_results)
+    timeout_count = len(timeout_results)
     
     if successful_results:
         avg_final_score = np.mean([r['final_score'] for r in successful_results])
@@ -893,6 +968,7 @@ def main():
         
         print(f"Total questions: {len(all_results)}")
         print(f"Successful: {len(successful_results)}")
+        print(f"Timeouts: {timeout_count}")
         print(f"Errors: {error_count}")
         print(f"Accuracy: {correct_count}/{len(successful_results)} ({correct_count/len(successful_results):.2%})")
         print(f"Average final score: {avg_final_score:.4f}")
