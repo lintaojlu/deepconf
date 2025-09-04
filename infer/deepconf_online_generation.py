@@ -851,11 +851,14 @@ def main():
     print("SAVING RESULTS TO CSV")
     print(f"{'='*60}")
     
+    # Ensure outputs directory exists
+    os.makedirs("outputs", exist_ok=True)
+    
     # Create DataFrame
     df = pd.DataFrame(all_results)
     
     # Select columns for CSV output
-    csv_columns = ['query', 'truth', 'answer', 'net', 'dismantle']
+    csv_columns = ['query', 'truth', 'answer', 'net', 'dismantle', 'final_score']
     csv_df = df[csv_columns].copy()
     
     # Save to CSV
