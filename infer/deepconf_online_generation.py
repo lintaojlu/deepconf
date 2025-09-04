@@ -815,8 +815,6 @@ def main():
     
     # Process each question
     for qid in tqdm(range(len(data)), desc="Processing questions"):
-        if qid <44:
-            continue
         try:
             print(f"\n{'='*80}")
             print(f"Processing Question {qid + 1}/{len(data)}")

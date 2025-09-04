@@ -4,7 +4,7 @@
 Sentence Transformer 工具模块
 用于下载模型、计算语义相似度等功能
 
-注意：使用Qwen3-Embedding-0.6B模型需要transformers>=4.51.0
+注意：使用Qwen3-Embedding-4B模型需要transformers>=4.51.0
 如果遇到KeyError: 'qwen3'错误，请升级transformers库：
 pip install transformers>=4.51.0
 """
@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 class SentenceTransformerSimilarity:
     """Sentence Transformer 语义相似度计算器"""
     
-    def __init__(self, model_name: str = "Qwen/Qwen3-Embedding-0.6B", cache_dir: str = "./models"):
+    def __init__(self, model_name: str = "Qwen/Qwen3-Embedding-4B", cache_dir: str = "./models"):
         """
         初始化Sentence Transformer模型
         
         Args:
-            model_name (str): 模型名称，默认为 "Qwen/Qwen3-Embedding-0.6B"
+            model_name (str): 模型名称，默认为 "Qwen/Qwen3-Embedding-4B"
             cache_dir (str): 模型缓存目录
         """
         self.model_name = model_name
@@ -278,7 +278,7 @@ class SentenceTransformerSimilarity:
 
 def compute_semantic_similarity(text1: str, 
                                text2: str, 
-                               model_name: str = "Qwen/Qwen3-Embedding-0.6B",
+                               model_name: str = "Qwen/Qwen3-Embedding-4B",
                                normalize: bool = True) -> float:
     """
     计算两个文本的语义相似度（便捷函数）
