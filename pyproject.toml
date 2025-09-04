@@ -47,6 +47,9 @@ visualization = [
     "plotly>=5.0.0",
 ]
 
+[tool.uv]
+managed = false  # 禁用自动锁定，只使用 pyproject.toml
+
 [tool.black]
 line-length = 88
 target-version = ['py310']

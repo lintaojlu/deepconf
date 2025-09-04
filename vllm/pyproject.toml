@@ -46,7 +46,9 @@ vllm = "vllm.entrypoints.cli.main:main"
 lora_filesystem_resolver = "vllm.plugins.lora_resolvers.filesystem_resolver:register_filesystem_resolver"
 
 [tool.setuptools_scm]
-# no extra settings needed, presence enables setuptools-scm
+# Skip git detection and use fixed version
+write_to = "vllm/_version.py"
+fallback_version = "1.0.0"
 
 [tool.setuptools.packages.find]
 where = ["."]
