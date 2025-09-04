@@ -33,17 +33,17 @@ uv sync
 echo "🎯 激活虚拟环境..."
 source .venv/bin/activate
 
+# 安装 vllm
+echo "🔧 安装 vllm..."
+cd vllm
+VLLM_USE_PRECOMPILED=1 uv pip install --editable .
+cd ..
+
 # 验证环境
 echo "🧪 验证环境..."
 python -c "import torch; print(f'✅ PyTorch: {torch.__version__}')" || echo "❌ PyTorch 导入失败"
 python -c "import pandas; print('✅ Pandas: OK')" || echo "❌ Pandas 导入失败"
 python -c "import sentence_transformers; print('✅ Sentence Transformers: OK')" || echo "❌ Sentence Transformers 导入失败"
-
-# 测试项目模块
-echo "🔍 测试项目模块..."
-cd infer
-python -c "import sentence_transformer_utils; print('✅ 项目模块: OK')" || echo "❌ 项目模块导入失败"
-cd ..
 
 echo ""
 echo "🎉 环境设置完成！"
