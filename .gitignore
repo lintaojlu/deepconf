@@ -117,9 +117,6 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-/site
-
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -139,12 +136,6 @@ test_models/
 outputs/
 *.pkl
 *.pickle
-
-# Data files (uncomment if you don't want to track data files)
-# data/
-# *.xlsx
-# *.csv
-# *.jsonl
 
 # Logs
 *.log
@@ -185,6 +176,3 @@ config.json
 secrets.json
 .env.local
 
-# Test files (uncomment if you don't want to track test files)
-test_*.py
-*_test.py
