@@ -3,6 +3,10 @@
 """
 Sentence Transformer 工具模块
 用于下载模型、计算语义相似度等功能
+
+注意：使用Qwen3-Embedding-0.6B模型需要transformers>=4.51.0
+如果遇到KeyError: 'qwen3'错误，请升级transformers库：
+pip install transformers>=4.51.0
 """
 
 import os
@@ -20,12 +24,12 @@ logger = logging.getLogger(__name__)
 class SentenceTransformerSimilarity:
     """Sentence Transformer 语义相似度计算器"""
     
-    def __init__(self, model_name: str = "BAAI/bge-small-zh-v1.5", cache_dir: str = "./models"):
+    def __init__(self, model_name: str = "Qwen/Qwen3-Embedding-0.6B", cache_dir: str = "./models"):
         """
         初始化Sentence Transformer模型
         
         Args:
-            model_name (str): 模型名称，默认为 "BAAI/bge-small-zh-v1.5"
+            model_name (str): 模型名称，默认为 "Qwen/Qwen3-Embedding-0.6B"
             cache_dir (str): 模型缓存目录
         """
         self.model_name = model_name
@@ -66,13 +70,14 @@ class SentenceTransformerSimilarity:
             logger.error(f"❌ 模型下载失败: {e}")
             raise
     
-    def encode_texts(self, texts: Union[str, List[str]], normalize: bool = True) -> np.ndarray:
+    def encode_texts(self, texts: Union[str, List[str]], normalize: bool = True, is_query: bool = False) -> np.ndarray:
         """
         将文本编码为向量
         
         Args:
             texts (Union[str, List[str]]): 输入文本或文本列表
             normalize (bool): 是否对向量进行L2归一化
+            is_query (bool): 是否为查询文本（用于qwen模型的特殊处理）
         
         Returns:
             np.ndarray: 编码后的向量
@@ -87,12 +92,18 @@ class SentenceTransformerSimilarity:
         logger.info(f"正在embedding {len(texts)} 个文本...")
         
         # 编码文本
-        embeddings = self.model.encode(
-            texts,
-            convert_to_numpy=True,
-            normalize_embeddings=normalize,
-            show_progress_bar=False  # 关闭进度条，减少输出
-        )
+        # 对于qwen模型，如果是查询文本需要使用特殊的prompt_name
+        encode_kwargs = {
+            "convert_to_numpy": True,
+            "normalize_embeddings": normalize,
+            "show_progress_bar": False  # 关闭进度条，减少输出
+        }
+        
+        # 如果是qwen模型且is_query为True，添加prompt_name参数
+        if "qwen" in self.model_name.lower() and is_query:
+            encode_kwargs["prompt_name"] = "query"
+        
+        embeddings = self.model.encode(texts, **encode_kwargs)
         
         # logger.info(f"✅ 编码完成，向量维度: {embeddings.shape}")
         return embeddings
@@ -112,8 +123,10 @@ class SentenceTransformerSimilarity:
         if self.model is None:
             raise ValueError("模型未加载，请先调用 download_model() 方法")
         
-        # 编码两个文本
-        embeddings = self.encode_texts([text1, text2], normalize=normalize)
+        # 编码两个文本（将第一个文本作为查询）
+        query_embedding = self.encode_texts([text1], normalize=normalize, is_query=True)
+        doc_embedding = self.encode_texts([text2], normalize=normalize, is_query=False)
+        embeddings = np.vstack([query_embedding, doc_embedding])
         
         # 计算余弦相似度
         similarity = np.dot(embeddings[0], embeddings[1])
@@ -146,11 +159,8 @@ class SentenceTransformerSimilarity:
             raise ValueError("模型未加载，请先调用 download_model() 方法")
         
         # 编码查询文本和所有候选文本
-        all_texts = [query_text] + candidate_texts
-        embeddings = self.encode_texts(all_texts, normalize=normalize)
-        
-        query_embedding = embeddings[0]
-        candidate_embeddings = embeddings[1:]
+        query_embedding = self.encode_texts([query_text], normalize=normalize, is_query=True)[0]
+        candidate_embeddings = self.encode_texts(candidate_texts, normalize=normalize, is_query=False)
         
         # 计算相似度
         similarities = []
@@ -244,12 +254,10 @@ class SentenceTransformerSimilarity:
         # 分离所有文本
         texts1 = [pair[0] for pair in text_pairs]
         texts2 = [pair[1] for pair in text_pairs]
-        all_texts = texts1 + texts2
 
-        # 只调用一次批量编码
-        all_embeddings = self.encode_texts(all_texts, normalize=normalize)
-        embeddings1 = all_embeddings[:len(texts1)]
-        embeddings2 = all_embeddings[len(texts1):]
+        # 对于qwen模型，假设第一个文本是查询，第二个是文档
+        embeddings1 = self.encode_texts(texts1, normalize=normalize, is_query=True)
+        embeddings2 = self.encode_texts(texts2, normalize=normalize, is_query=False)
 
         # 计算对应位置的相似度
         similarities = []
@@ -270,7 +278,7 @@ class SentenceTransformerSimilarity:
 
 def compute_semantic_similarity(text1: str, 
                                text2: str, 
-                               model_name: str = "BAAI/bge-small-zh-v1.5",
+                               model_name: str = "Qwen/Qwen3-Embedding-0.6B",
                                normalize: bool = True) -> float:
     """
     计算两个文本的语义相似度（便捷函数）
