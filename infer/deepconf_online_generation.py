@@ -130,7 +130,6 @@ def calculate_dismantle_mapping_score(voted_dismantle, truth_dismantle):
         return 0.0
     
     # Get Sentence Transformer instance
-    print(f"Getting sentence transformer...")
     sentence_transformer = get_sentence_transformer()
     
     # Generate all possible permutations of truth_parts
@@ -141,22 +140,23 @@ def calculate_dismantle_mapping_score(voted_dismantle, truth_dismantle):
     # Collect all unique text pairs for batch processing
     unique_pairs = set()
     permutation_pairs = []
-    
-    print(f"Generating all possible permutations of truth_parts...")
-    print(f"Permutations: min_len: {min_len}")
-    for perm in permutations(truth_parts, min_len):
-        perm_pairs = []
+    # if min_len > 5, direct one-to-one mapping, not permutation
+    if min_len > 5:
         for i in range(min_len):
             voted_part = voted_parts[i]
-            truth_part = perm[i]
-            
-            if voted_part and truth_part:
-                pair = (voted_part, truth_part)
-                unique_pairs.add(pair)
-                perm_pairs.append(pair)
-        permutation_pairs.append(perm_pairs)
+            truth_part = truth_parts[i]
+            unique_pairs.add((voted_part, truth_part))
+            permutation_pairs.append([(voted_part, truth_part)])
+    else:
+        for perm in permutations(truth_parts, min_len):
+            perm_pairs = []
+            for i in range(min_len):
+                voted_part = voted_parts[i]
+                truth_part = perm[i]
+                unique_pairs.add((voted_part, truth_part))
+                perm_pairs.append((voted_part, truth_part))
+            permutation_pairs.append(perm_pairs)
     
-    print(f"Batch computing similarities for all unique pairs...")
     # Batch compute similarities for all unique pairs
     if unique_pairs:
         unique_pairs_list = list(unique_pairs)
@@ -275,18 +275,15 @@ def process_trace(choice, trace_id, ground_truth):
     tokens = [t.token for t in choice.logprobs.content]
 
     # Calculate confidence
-    print(f"Computing confidence...")
     confs = compute_confidence([t.top_logprobs for t in choice.logprobs.content])
     sliding_window = compute_least_grouped(confs, group_size=WINDOW_SIZE)
 
     # Extract answer
-    print(f"Extracting answer...")
     extracted_answer = extract_answer(text)
 
     # Calculate correctness using our custom scoring function
     final_score = 0.0
     if extracted_answer is not None and ground_truth is not None:
-        print(f"Calculating score...")
         _, _, final_score = calculate_score(extracted_answer, ground_truth)
 
     trace_data = {
