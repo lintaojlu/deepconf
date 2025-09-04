@@ -279,6 +279,7 @@ def process_trace(choice, trace_id, ground_truth):
     # Calculate correctness using our custom scoring function
     print(f"extracted_answer: {extracted_answer}")
     print(f"ground_truth: {ground_truth}")
+    input()
     final_score = 0.0
     if extracted_answer is not None and ground_truth is not None:
         _, _, final_score = calculate_score(extracted_answer, ground_truth)
