@@ -34,16 +34,27 @@ uv pip install -e .
 # 安装 vllm
 echo "🔧 安装 vllm..."
 if [ -d "vllm" ]; then
+    # 先安装构建依赖
+    echo "📦 安装构建依赖..."
+    uv pip install setuptools-scm wheel build
+    
     cd vllm
     echo "📦 正在安装 vllm (跳过 Git 检测)..."
     
     # 设置环境变量跳过 Git 检测
     export SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0
     export SETUPTOOLS_SCM_IGNORE_VCS_ROOTS="*"
-    export VLLM_USE_PRECOMPILED=1
     
-    # 强制安装，忽略版本检测问题
-    VLLM_USE_PRECOMPILED=1 SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 uv pip install --editable . --no-build-isolation
+    # 检测系统类型，决定是否使用预编译版本
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "🍎 检测到 macOS，使用源码编译..."
+        SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 uv pip install --editable .
+    else
+        echo "🐧 检测到 Linux，使用预编译版本..."
+        export VLLM_USE_PRECOMPILED=1
+        VLLM_USE_PRECOMPILED=1 SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 uv pip install --editable .
+    fi
+    
     echo "✅ vllm 安装完成"
     cd ..
 else
