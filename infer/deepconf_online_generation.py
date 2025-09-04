@@ -314,15 +314,18 @@ def process_trace(choice, trace_id, ground_truth):
     tokens = [t.token for t in choice.logprobs.content]
 
     # Calculate confidence
+    print(f"Computing confidence...")
     confs = compute_confidence([t.top_logprobs for t in choice.logprobs.content])
     sliding_window = compute_least_grouped(confs, group_size=WINDOW_SIZE)
 
     # Extract answer
+    print(f"Extracting answer...")
     extracted_answer = extract_answer(text)
 
     # Calculate correctness using our custom scoring function
     final_score = 0.0
     if extracted_answer is not None and ground_truth is not None:
+        print(f"Calculating score...")
         _, _, final_score = calculate_score(extracted_answer, ground_truth)
 
     trace_data = {
@@ -881,6 +884,8 @@ def main():
     
     # Process each question
     for qid in tqdm(range(len(data)), desc="Processing questions"):
+        if qid <44:
+            continue
         try:
             print(f"\n{'='*80}")
             print(f"Processing Question {qid + 1}/{len(data)}")
