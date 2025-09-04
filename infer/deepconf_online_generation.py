@@ -140,13 +140,10 @@ def calculate_dismantle_mapping_score(voted_dismantle, truth_dismantle):
     # Collect all unique text pairs for batch processing
     unique_pairs = set()
     permutation_pairs = []
-    # if min_len > 5, direct one-to-one mapping, not permutation
+    # if min_len > 5, directly use voted_dismantle and truth_dismantle as a pair, no permutation
     if min_len > 5:
-        for i in range(min_len):
-            voted_part = voted_parts[i]
-            truth_part = truth_parts[i]
-            unique_pairs.add((voted_part, truth_part))
-            permutation_pairs.append([(voted_part, truth_part)])
+        unique_pairs.add((voted_dismantle, truth_dismantle))
+        permutation_pairs.append([(voted_dismantle, truth_dismantle)])
     else:
         for perm in permutations(truth_parts, min_len):
             perm_pairs = []
