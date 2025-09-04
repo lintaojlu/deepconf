@@ -135,6 +135,9 @@ test_models/
 # Data files
 infer/data/
 
+# vLLM (cloned from GitHub)
+vllm/
+
 # Output files
 outputs/
 *.pkl
