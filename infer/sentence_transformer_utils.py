@@ -84,7 +84,7 @@ class SentenceTransformerSimilarity:
         if isinstance(texts, str):
             texts = [texts]
         
-        # logger.info(f"正在编码 {len(texts)} 个文本...")
+        logger.info(f"正在embedding {len(texts)} 个文本...")
         
         # 编码文本
         embeddings = self.model.encode(
