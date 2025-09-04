@@ -27,14 +27,20 @@ cd vllm
 # 设置环境变量完全跳过 Git 检测
 export SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0
 export SETUPTOOLS_SCM_IGNORE_VCS_ROOTS="*"
-export VLLM_USE_PRECOMPILED=1
 export SETUPTOOLS_SCM_DISABLE=true
 
 echo "📦 正在安装 vLLM..."
 echo "⚠️  跳过所有 Git 和版本检测..."
 
-# 强制安装，使用预编译版本
-VLLM_USE_PRECOMPILED=1 SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 uv pip install --editable . --no-build-isolation --force-reinstall
+# 检测系统类型，决定安装方式
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "🍎 检测到 macOS，使用源码编译..."
+    SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 uv pip install --editable . --force-reinstall
+else
+    echo "🐧 检测到 Linux，使用预编译版本..."
+    export VLLM_USE_PRECOMPILED=1
+    VLLM_USE_PRECOMPILED=1 SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 uv pip install --editable . --force-reinstall
+fi
 
 if [ $? -eq 0 ]; then
     echo "✅ vLLM 安装成功！"
