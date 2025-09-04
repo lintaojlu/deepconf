@@ -18,6 +18,10 @@ else
     exit 1
 fi
 
+# 安装必要的构建依赖
+echo "📦 安装构建依赖..."
+uv pip install setuptools-scm wheel build
+
 cd vllm
 
 # 设置环境变量完全跳过 Git 检测
