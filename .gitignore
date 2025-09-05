@@ -182,3 +182,4 @@ config.json
 secrets.json
 .env.local
 
+infer/p2q请求脚本/*
