@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import re
 from collections import Counter
+from datetime import datetime
 
 # ===========================
 # Configuration
@@ -166,7 +167,7 @@ class DeepConfInference:
             print(f"Answer weights:")
             # 按权重排序
             answer_weights = sorted(answer_weights.items(), key=lambda x: x[1], reverse=True)
-            print(json.dumps(answer_weights, ensure_ascii=False))
+            print(json.dumps(answer_weights, ensure_ascii=False, indent=4))
             # for answer, weight in answer_weights:
             #     print(f"  {answer}: {weight}")
 
@@ -481,11 +482,12 @@ def main(
         # 将当前query添加到最后
         query_list.append(str(query0).strip())
         print()
-        print(f"*"*100)
-        print(f"query_list: ")
-        print(json.dumps(query_list, ensure_ascii=False))
-
+        print("*"*60)
         print(f"Processing row {idx + 1}/{len(csv1)}: {query0[:50]}...")
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"Time: {current_time}")
+        print(f"Query list: {query_list}")
+        print("*"*60)
 
         try:
             # 调用模型
