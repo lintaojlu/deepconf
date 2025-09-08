@@ -321,7 +321,7 @@ class DeepConfInference:
                 answer_counts = Counter(voting_answers)
                 print(f"\nVoting breakdown:")
                 for answer, count in answer_counts.most_common():
-                    print(f"  {answer[:100]}...: {count} votes")
+                    print(f"  {answer}: {count} votes")
 
             print(f"\n{'='*60}")
             print("FINAL SUMMARY")
@@ -478,6 +478,8 @@ def main(
 
         # 将当前query添加到最后
         query_list.append(str(query0).strip())
+        print()
+        print(f"*"*100)
         print(f"query_list: ")
         print(json.dumps(query_list, ensure_ascii=False))
 
