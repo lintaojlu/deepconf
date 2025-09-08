@@ -164,9 +164,12 @@ class DeepConfInference:
             # 显示投票细节
             print(f"\nVoting breakdown:")
             print(f"Answer weights:")
-            for answer, weight in answer_weights.items():
-                print(f"  {answer}: {weight}")
-                
+            # 按权重排序
+            answer_weights = sorted(answer_weights.items(), key=lambda x: x[1], reverse=True)
+            print(json.dumps(answer_weights, ensure_ascii=False))
+            # for answer, weight in answer_weights:
+            #     print(f"  {answer}: {weight}")
+
         return voted_answer
 
     def process_trace(self, choice, trace_id):
@@ -507,9 +510,6 @@ def main(
             # 添加结果到行 - 只保存query、net、dismantle
             result_row = [query0, net, dismantle]
             results.append(result_row)
-
-            print(f"  Net: {net}")
-            print(f"  Dismantle: {dismantle[:100]}...")
 
         except Exception as e:
             print(f"Error processing row {idx + 1}: {str(e)}")
