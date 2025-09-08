@@ -319,11 +319,11 @@ class DeepConfInference:
 # ===========================
 # 核心函数
 # ===========================
-def request_model(query_list=None, answer_list0=None, time_str=None, location=None, all_p2q_res=False):
+def request_model(query_list=None, answer_list0=None, time_str=None, location=None, all_p2q_res=False, temperature=TEMPERATURE, confidence_percentile=CONFIDENCE_PERCENTILE, window_size=WINDOW_SIZE, warmup_traces=WARMUP_TRACES, total_budget=TOTAL_BUDGET):
     """使用DeepConf处理查询及对话历史"""
     
     # 创建DeepConf实例
-    deepconf = DeepConfInference()
+    deepconf = DeepConfInference(temperature=temperature, confidence_percentile=confidence_percentile, window_size=window_size, warmup_traces=warmup_traces, total_budget=total_budget)
     
     answer_list = ["..."] + answer_list0
     system = PROMPT["system"].format(time=time_str, location=location)
@@ -360,7 +360,7 @@ def extract_response(response):
     
     return components
 
-def main(csv_path, output_dir="results"):
+def main(csv_path, output_dir="results", temperature=TEMPERATURE, confidence_percentile=CONFIDENCE_PERCENTILE, window_size=WINDOW_SIZE, warmup_traces=WARMUP_TRACES, total_budget=TOTAL_BUDGET):
     """处理CSV文件并保存结果"""
     
     time_str = "2025年08月17日 9:30:46 星期六"
@@ -437,7 +437,7 @@ def main(csv_path, output_dir="results"):
         
         try:
             # 调用模型
-            response = request_model(query_list, answer_list, time_str, location)
+            response = request_model(query_list, answer_list, time_str, location, temperature, confidence_percentile, window_size, warmup_traces, total_budget)
             
             # 解析响应
             components = extract_response(response)
@@ -476,8 +476,17 @@ if __name__ == "__main__":
                         help='Input CSV file path')
     parser.add_argument('--output-dir', '-o', type=str, default="results",
                         help='Output directory for results (default: results)')
-    
+    parser.add_argument('--temperature', '-t', type=float, default=TEMPERATURE,
+                        help='Temperature for DeepConf (default: 0.9)')
+    parser.add_argument('--confidence_percentile', '-c', type=int, default=CONFIDENCE_PERCENTILE,
+                        help='Confidence percentile for DeepConf (default: 10)')
+    parser.add_argument('--window_size', '-w', type=int, default=WINDOW_SIZE,
+                        help='Window size for DeepConf (default: 8)')
+    parser.add_argument('--warmup_traces', '-u', type=int, default=WARMUP_TRACES,
+                        help='Warmup traces for DeepConf (default: 16)')
+    parser.add_argument('--total_budget', '-b', type=int, default=TOTAL_BUDGET,
+                        help='Total budget for DeepConf (default: 64)')
     args = parser.parse_args()
     
     # 运行主函数
-    main(args.csv_path, args.output_dir)
+    main(args.csv_path, args.output_dir, args.temperature, args.confidence_percentile, args.window_size, args.warmup_traces, args.total_budget)
