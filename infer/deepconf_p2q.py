@@ -167,9 +167,8 @@ class DeepConfInference:
             print(f"Answer weights:")
             # 按权重排序
             answer_weights = sorted(answer_weights.items(), key=lambda x: x[1], reverse=True)
-            print(json.dumps(answer_weights, ensure_ascii=False, indent=4))
-            # for answer, weight in answer_weights:
-            #     print(f"  {answer}: {weight}")
+            for answer, weight in answer_weights:
+                print(f"  {answer}: {weight}")
 
         return voted_answer
 
