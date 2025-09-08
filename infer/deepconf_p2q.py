@@ -14,9 +14,9 @@ PORT = 8000
 
 # Inference parameters
 WARMUP_TRACES = 16
-TOTAL_BUDGET = 32
+TOTAL_BUDGET = 64
 CONFIDENCE_PERCENTILE = 90
-WINDOW_SIZE = 2048
+WINDOW_SIZE = 8
 
 # PROMPT配置 - 从文件读取
 def load_prompt(prompt_file="data/prompt.txt"):
@@ -332,7 +332,7 @@ def request_model(query_list=None, answer_list0=None, time_str=None, location=No
         message_log.append({"role": "user", "content": user})
         
         # 使用deepconf进行推理
-        response = deepconf.inference(message_log, verbose=False)
+        response = deepconf.inference(message_log, verbose=True)
         
         message_log.append({"role": "assistant", "content": response})
     
@@ -428,6 +428,8 @@ def main(csv_path, output_dir="results"):
         
         # 将当前query添加到最后
         query_list.append(str(query0).strip())
+        print(f"query_list: ")
+        print(json.dumps(query_list, ensure_ascii=False))
         
         print(f"Processing row {idx + 1}/{len(csv1)}: {query0[:50]}...")
         
@@ -441,21 +443,21 @@ def main(csv_path, output_dir="results"):
             net = components["net"]
             dismantle = components["dismantle"]
             
-            # 添加结果到行
-            line = line + [net, dismantle]
-            results.append(line)
+            # 添加结果到行 - 只保存query、net、dismantle
+            result_row = [query0, net, dismantle]
+            results.append(result_row)
             
             print(f"  Net: {net}")
             print(f"  Dismantle: {dismantle[:100]}...")
             
         except Exception as e:
             print(f"Error processing row {idx + 1}: {str(e)}")
-            # 添加错误结果
-            line = line + ["error", "error"]
-            results.append(line)
+            # 添加错误结果 - 只保存query、net、dismantle
+            result_row = [query0, "error", "error"]
+            results.append(result_row)
     
-    # 保存结果
-    result_df = pd.DataFrame(results, columns=headers + ["net", "dismantle"])
+    # 保存结果 - 只保存query、net、dismantle三列
+    result_df = pd.DataFrame(results, columns=["query", "net", "dismantle"])
     result_df.to_csv(result_path, index=False)
     
     print(f"\nResults saved to: {result_path}")
