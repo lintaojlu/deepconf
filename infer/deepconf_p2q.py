@@ -139,7 +139,7 @@ class DeepConfInference:
 
         return sliding_means
 
-    def weighted_majority_vote(self, answers, weights):
+    def weighted_majority_vote(self, answers, weights, verbose=False):
         """加权多数投票"""
         if not answers:
             return None
@@ -156,6 +156,17 @@ class DeepConfInference:
             return None
 
         voted_answer = max(answer_weights.keys(), key=lambda x: answer_weights[x])
+
+        if verbose:
+            print(f"Traces used for voting: {len(answers)}")
+            print(f"Voted answer: {voted_answer}")
+
+            # 显示投票细节
+            print(f"\nVoting breakdown:")
+            print(f"Answer weights:")
+            for answer, weight in answer_weights.items():
+                print(f"  {answer}: {weight}")
+                
         return voted_answer
 
     def process_trace(self, choice, trace_id):
@@ -307,22 +318,10 @@ class DeepConfInference:
                     voting_answers.append(answer)
                     voting_weights.append(1.0)
 
-        if verbose:
-            print(f"Traces used for voting: {len(voting_answers)}")
-
         # 执行加权多数投票
-        voted_answer = self.weighted_majority_vote(voting_answers, voting_weights)
+        voted_answer = self.weighted_majority_vote(voting_answers, voting_weights, verbose)
 
         if verbose:
-            print(f"Voted answer: {voted_answer}")
-
-            # 显示投票细节
-            if voting_answers:
-                answer_counts = Counter(voting_answers)
-                print(f"\nVoting breakdown:")
-                for answer, count in answer_counts.most_common():
-                    print(f"  {answer}: {count} votes")
-
             print(f"\n{'='*60}")
             print("FINAL SUMMARY")
             print(f"{'='*60}")
