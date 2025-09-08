@@ -208,7 +208,8 @@ class DeepConfInference:
             print(f"Confidence percentile: {self.confidence_percentile}")
             print(f"Temperature: {self.temperature}")
             user_prompt = messages[-1]["content"]
-            print(f"User prompt: {user_prompt[:100]+'...' if len(user_prompt) > 100 else user_prompt}")
+            print(f"User prompt: ")
+            print(user_prompt)
 
         # ===========================
         # WARMUP阶段
