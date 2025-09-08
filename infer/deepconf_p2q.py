@@ -17,6 +17,7 @@ WARMUP_TRACES = 16
 TOTAL_BUDGET = 64
 CONFIDENCE_PERCENTILE = 10
 WINDOW_SIZE = 8
+TEMPERATURE = 0.9
 
 # PROMPT配置 - 从文件读取
 def load_prompt(prompt_file="data/prompt.txt"):
@@ -91,7 +92,7 @@ class DeepConfInference:
     
     def __init__(self, model_path=MODEL_PATH, port=PORT, max_tokens=MAX_TOKENS,
                  warmup_traces=WARMUP_TRACES, total_budget=TOTAL_BUDGET, 
-                 confidence_percentile=CONFIDENCE_PERCENTILE, window_size=WINDOW_SIZE):
+                 confidence_percentile=CONFIDENCE_PERCENTILE, window_size=WINDOW_SIZE, temperature=TEMPERATURE):
         self.model_path = model_path
         self.port = port
         self.max_tokens = max_tokens
@@ -99,7 +100,7 @@ class DeepConfInference:
         self.total_budget = total_budget
         self.confidence_percentile = confidence_percentile
         self.window_size = window_size
-        
+        self.temperature = temperature
         # 初始化客户端
         self.client = openai.OpenAI(
             api_key="None",
@@ -177,6 +178,7 @@ class DeepConfInference:
             print(f"Warmup traces: {self.warmup_traces}")
             print(f"Total budget: {self.total_budget}")
             print(f"Confidence percentile: {self.confidence_percentile}")
+            print(f"Temperature: {self.temperature}")
         
         # ===========================
         # WARMUP阶段
@@ -190,7 +192,7 @@ class DeepConfInference:
             "model": self.model_path,
             "messages": messages,
             "max_tokens": self.max_tokens,
-            "temperature": 0.6,
+            "temperature": self.temperature,
             "top_p": 0.95,
             "logprobs": True,
             "top_logprobs": 20,
@@ -230,7 +232,7 @@ class DeepConfInference:
             "model": self.model_path,
             "messages": messages,
             "max_tokens": self.max_tokens,
-            "temperature": 0.6,
+            "temperature": self.temperature,
             "top_p": 0.95,
             "logprobs": True,
             "top_logprobs": 20,
