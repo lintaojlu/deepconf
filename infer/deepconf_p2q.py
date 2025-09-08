@@ -146,29 +146,30 @@ class DeepConfInference:
             return None
 
         answer_weights = {}
+        answer_counts = {}
         for answer, weight in zip(answers, weights):
             if answer is not None:
                 answer_str = str(answer)
-                answer_weights[answer_str] = answer_weights.get(
-                    answer_str, 0.0
-                ) + float(weight)
+                answer_weights[answer_str] = answer_weights.get(answer_str, 0.0) + float(weight)
+                answer_counts[answer_str] = answer_counts.get(answer_str, 0) + 1
 
         if not answer_weights:
             return None
 
         voted_answer = max(answer_weights.keys(), key=lambda x: answer_weights[x])
 
+        print(f"Voted answer: {voted_answer}")
         if verbose:
             print(f"Traces used for voting: {len(answers)}")
-            print(f"Voted answer: {voted_answer}")
-
             # 显示投票细节
             print(f"\nVoting breakdown:")
-            print(f"Answer weights:")
+            print(f"Answer weights and counts:")
             # 按权重排序
-            answer_weights = sorted(answer_weights.items(), key=lambda x: x[1], reverse=True)
-            for answer, weight in answer_weights:
-                print(f"  {answer}: {weight}")
+            sorted_answers = sorted(answer_weights.items(), key=lambda x: x[1], reverse=True)
+            # 显示每个回答的权重和计数
+            for answer, weight in sorted_answers:
+                count = answer_counts.get(answer, 0)
+                print(f"  {answer}: weight={weight}, count={count}")
 
         return voted_answer
 
@@ -206,6 +207,8 @@ class DeepConfInference:
             print(f"Total budget: {self.total_budget}")
             print(f"Confidence percentile: {self.confidence_percentile}")
             print(f"Temperature: {self.temperature}")
+            user_prompt = messages[-1]["content"]
+            print(f"User prompt: {user_prompt[:100]+'...' if len(user_prompt) > 100 else user_prompt}")
 
         # ===========================
         # WARMUP阶段
@@ -481,12 +484,13 @@ def main(
         # 将当前query添加到最后
         query_list.append(str(query0).strip())
         print()
-        print("*"*60)
+        print("*"*100)
         print(f"Processing row {idx + 1}/{len(csv1)}: {query0[:50]}...")
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"Time: {current_time}")
         print(f"Query list: {query_list}")
-        print("*"*60)
+        print("*"*100)
+        print()
 
         try:
             # 调用模型
