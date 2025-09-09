@@ -44,11 +44,13 @@ if [ ! -d "vllm" ]; then
     
     echo "📦 安装 vllm..."
     VLLM_USE_PRECOMPILED=1 uv pip install --editable .
-    
-    echo "📦 安装 Dynasor..."
+
+    echo "📦 克隆 Dynasor 仓库..."
     git clone https://github.com/hao-ai-lab/Dynasor.git
-    cd Dynasor && pip install . && cd -
-    
+
+    echo "📦 使用 uv 安装 Dynasor..."
+    uv pip install --editable ./Dynasor
+
     cd ..
     echo "✅ vllm 和 Dynasor 安装完成"
 else
