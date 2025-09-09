@@ -142,8 +142,8 @@ def main():
     
     # 演示CSV到XLSX转换
     print("\n1. CSV到XLSX转换演示:")
-    csv_file_path = "./data/deepconf_p2q_result.csv"
-    xlsx_file_path = "./data/deepconf_p2q_result.xlsx"
+    csv_file_path = "./data/deepconf_t0.9_b512.csv"
+    xlsx_file_path = "./data/deepconf_t0.9_b512.xlsx"
     csv_to_xlsx(csv_file_path, xlsx_file_path)
 
 
