@@ -83,7 +83,7 @@ def _run_single_deepconf(messages: List[Dict[str, Any]],
     client = openai.OpenAI(
         api_key="None",
         base_url=f"http://localhost:{PORT}/v1",
-        timeout=None
+        timeout=120
     )
 
     # WARMUP
@@ -172,7 +172,8 @@ def _run_single_deepconf(messages: List[Dict[str, Any]],
 def qsite_infer_deepconf(messages_list: List[List[Dict[str, Any]]],
                          warmup_traces: int = WARMUP_TRACES,
                          total_budget: int = TOTAL_BUDGET,
-                         confidence_percentile: int = CONFIDENCE_PERCENTILE) -> List[Dict[str, Any]]:
+                         confidence_percentile: int = CONFIDENCE_PERCENTILE,
+                         max_workers: int = None) -> List[Dict[str, Any]]:
     """
     Run deepconf inference concurrently for multiple messages and aggregate unique answers.
 
@@ -194,7 +195,7 @@ def qsite_infer_deepconf(messages_list: List[List[Dict[str, Any]]],
     def _task(idx: int, msgs: List[Dict[str, Any]]):
         return idx, _run_single_deepconf(msgs, warmup_traces, total_budget, confidence_percentile)
 
-    max_workers = max(1, min(32, len(messages_list)))
+    max_workers = max(1, min(32, len(messages_list))) if max_workers is None else max_workers
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_task, i, msgs) for i, msgs in enumerate(messages_list)]
         for fut in as_completed(futures):
@@ -218,11 +219,25 @@ def main():
     parser.add_argument('--warmup-traces', '-w', type=int, default=WARMUP_TRACES, help=f'Number of warmup traces (default: {WARMUP_TRACES})')
     parser.add_argument('--total-budget', '-t', type=int, default=TOTAL_BUDGET, help=f'Total budget (default: {TOTAL_BUDGET})')
     parser.add_argument('--confidence-percentile', '-c', type=int, default=CONFIDENCE_PERCENTILE, help=f'Confidence percentile (default: {CONFIDENCE_PERCENTILE})')
+    parser.add_argument('--model', type=str, default=MODEL_PATH, help='Model path/name')
+    parser.add_argument('--port', type=int, default=PORT, help='Serving port of OpenAI-compatible API')
+    parser.add_argument('--temperature', type=float, default=TEMPERATURE, help='Sampling temperature')
+    parser.add_argument('--top-p', type=float, default=TOP_P, help='Nucleus sampling top_p')
+    parser.add_argument('--top-k', type=int, default=TOP_K, help='Top-k sampling')
+    parser.add_argument('--max-workers', type=int, default=None, help='Max worker threads for concurrency')
+    parser.add_argument('--limit', type=int, default=None, help='Only process first N lines for quick check')
     args = parser.parse_args()
+
+    global MODEL_PATH, PORT, TEMPERATURE, TOP_P, TOP_K
+    MODEL_PATH = args.model
+    PORT = args.port
+    TEMPERATURE = args.temperature
+    TOP_P = args.top_p
+    TOP_K = args.top_k
 
     messages_list = []
     with open(args.input_file, 'r', encoding='utf-8') as f:
-        for line in f:
+        for idx, line in enumerate(f):
             line = line.strip()
             if not line:
                 continue
@@ -233,13 +248,20 @@ def main():
                 messages_list.append(msgs)
             except Exception:
                 continue
+            if args.limit is not None and len(messages_list) >= args.limit:
+                break
+
+    print(f"Loaded {len(messages_list)} message sets. Starting inference...")
 
     results = qsite_infer_deepconf(
         messages_list=messages_list,
         warmup_traces=args.warmup_traces,
         total_budget=args.total_budget,
         confidence_percentile=args.confidence_percentile,
+        max_workers=args.max_workers,
     )
+
+    print(f"Inference completed. Writing CSV to {args.output_file} ...")
 
     # Convert to DataFrame
     records = []
@@ -250,6 +272,8 @@ def main():
         })
     df = pd.DataFrame.from_records(records)
     df.to_csv(args.output_file, index=False, encoding='utf-8')
+
+    print("Done.")
 
 
 if __name__ == '__main__':
