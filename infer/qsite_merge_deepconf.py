@@ -243,11 +243,20 @@ def main():
             if not line:
                 continue
             try:
-                msgs = json.loads(line)
+                data = json.loads(line)
+                # Handle both formats: direct messages array or {"messages": [...]}
+                if isinstance(data, list):
+                    msgs = data
+                elif isinstance(data, dict) and "messages" in data:
+                    msgs = data["messages"]
+                else:
+                    continue
+                
                 if not isinstance(msgs, list):
                     continue
                 messages_list.append(msgs)
-            except Exception:
+            except Exception as e:
+                print(f"Warning: Failed to parse line {idx + 1}: {e}")
                 continue
             if args.limit is not None and len(messages_list) >= args.limit:
                 break
