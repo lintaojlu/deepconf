@@ -212,6 +212,8 @@ def main():
     import argparse
     import json
     import pandas as pd
+    
+    global MODEL_PATH, PORT, TEMPERATURE, TOP_P, TOP_K
 
     parser = argparse.ArgumentParser(description='Batch deepconf inference with order-preserving merge')
     parser.add_argument('--input-file', '-i', type=str, required=True, help='Path to input file; each line is a JSON array of messages')
@@ -228,7 +230,6 @@ def main():
     parser.add_argument('--limit', type=int, default=None, help='Only process first N lines for quick check')
     args = parser.parse_args()
 
-    global MODEL_PATH, PORT, TEMPERATURE, TOP_P, TOP_K
     MODEL_PATH = args.model
     PORT = args.port
     TEMPERATURE = args.temperature
