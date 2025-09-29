@@ -90,9 +90,27 @@ def _clean_and_parse_answer(answer: str) -> List[str]:
     if not answer:
         return []
     
-    # Remove <think>...</think> tags (case insensitive, multiline)
+    # Enhanced think tag removal with multiple patterns
     import re
+    
+    # Pattern 1: Complete <think>...</think> tags (greedy and non-greedy)
     cleaned = re.sub(r'<think>.*?</think>', '', answer, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Pattern 2: Standalone opening <think> tags (handle cases where closing tag is missing)
+    cleaned = re.sub(r'<think>[^<]*(?=\[)', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Pattern 3: Remove any remaining standalone <think> tags at the beginning
+    cleaned = re.sub(r'^[^[]*<think>[^[]*', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Pattern 4: Clean up any remaining <think> fragments before JSON content
+    cleaned = re.sub(r'^.*?<think>.*?(?=\[)', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    
+    # General cleanup: remove everything before the first '[' if it contains <think>
+    if '<think>' in cleaned.lower():
+        match = re.search(r'\[', cleaned)
+        if match:
+            cleaned = cleaned[match.start():]
+    
     cleaned = cleaned.strip()
     
     if not cleaned:
