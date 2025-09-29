@@ -28,6 +28,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+# Reduce httpx noise
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 # ===========================
 # Confidence Calculation
@@ -229,14 +232,11 @@ def qsite_infer_deepconf(messages_list: List[List[Dict[str, Any]]],
             idx, res = fut.result()
             results[idx] = res
             completed_count += 1
-            if completed_count % 10 == 0 or completed_count == len(messages_list):
+            if completed_count % 100 == 0 or completed_count == len(messages_list):
                 logger.info(f"Progress: {completed_count}/{len(messages_list)} queries completed")
 
     logger.info("Batch inference completed")
     return results
-
-
-__all__ = ["qsite_infer_deepconf"]
 
 
 def main():
