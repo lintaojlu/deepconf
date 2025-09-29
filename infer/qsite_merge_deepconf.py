@@ -267,61 +267,90 @@ def main():
     TOP_P = args.top_p
     TOP_K = args.top_k
 
-    messages_list = []
-    with open(args.input_file, 'r', encoding='utf-8') as f:
-        for idx, line in enumerate(f):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                data = json.loads(line)
-                # Handle both formats: direct messages array or {"messages": [...]}
-                if isinstance(data, list):
-                    msgs = data
-                elif isinstance(data, dict) and "messages" in data:
-                    msgs = data["messages"]
-                else:
-                    continue
-                
-                if not isinstance(msgs, list):
-                    continue
-                messages_list.append(msgs)
-            except Exception as e:
-                logger.warning(f"Failed to parse line {idx + 1}: {e}")
-                continue
-            if args.limit is not None and len(messages_list) >= args.limit:
-                break
-
-    logger.info(f"Loaded {len(messages_list)} message sets from {args.input_file}")
-    if len(messages_list) == 0:
-        logger.error("No valid messages found in input file!")
-        return
-
     logger.info(f"Configuration: model={MODEL_PATH}, port={PORT}, temp={TEMPERATURE}, "
                 f"top_p={TOP_P}, top_k={TOP_K}, warmup={args.warmup_traces}, "
                 f"budget={args.total_budget}, conf_pct={args.confidence_percentile}")
 
-    results = qsite_infer_deepconf(
-        messages_list=messages_list,
-        warmup_traces=args.warmup_traces,
-        total_budget=args.total_budget,
-        confidence_percentile=args.confidence_percentile,
-        max_workers=args.max_workers,
-    )
+    batch_size = 10000
+    total_processed = 0
+    batch_count = 0
+    is_first_batch = True
 
-    logger.info(f"Writing results to CSV: {args.output_file}")
+    with open(args.input_file, 'r', encoding='utf-8') as f:
+        while True:
+            # Read batch
+            messages_batch = []
+            lines_read = 0
+            
+            for idx, line in enumerate(f):
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                try:
+                    data = json.loads(line)
+                    msgs = data["messages"]
+                    
+                    if not isinstance(msgs, list):
+                        continue
+                    messages_batch.append(msgs)
+                    lines_read += 1
+                    
+                    # Check limits
+                    if len(messages_batch) >= batch_size:
+                        break
+                    if args.limit is not None and total_processed + len(messages_batch) >= args.limit:
+                        break
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to parse line {total_processed + lines_read + 1}: {e}")
+                    continue
+            
+            # No more data
+            if not messages_batch:
+                break
+                
+            batch_count += 1
+            logger.info(f"Processing batch {batch_count}: {len(messages_batch)} messages")
+            
+            # Process batch
+            results = qsite_infer_deepconf(
+                messages_list=messages_batch,
+                warmup_traces=args.warmup_traces,
+                total_budget=args.total_budget,
+                confidence_percentile=args.confidence_percentile,
+                max_workers=args.max_workers,
+            )
+            
+            # Convert to DataFrame
+            records = []
+            for item in results:
+                records.append({
+                    'query': item.get('query', ''),
+                    'answer_list': json.dumps(item.get('answer_list', []), ensure_ascii=False),
+                })
+            df = pd.DataFrame.from_records(records)
+            
+            # Save batch results
+            if is_first_batch:
+                df.to_csv(args.output_file, index=False, encoding='utf-8', mode='w')
+                is_first_batch = False
+                logger.info(f"Created CSV file: {args.output_file}")
+            else:
+                df.to_csv(args.output_file, index=False, encoding='utf-8', mode='a', header=False)
+                
+            total_processed += len(messages_batch)
+            logger.info(f"Batch {batch_count} completed. Total processed: {total_processed}")
+            
+            # Check if we've hit the limit
+            if args.limit is not None and total_processed >= args.limit:
+                break
 
-    # Convert to DataFrame
-    records = []
-    for item in results:
-        records.append({
-            'query': item.get('query', ''),
-            'answer_list': json.dumps(item.get('answer_list', []), ensure_ascii=False),
-        })
-    df = pd.DataFrame.from_records(records)
-    df.to_csv(args.output_file, index=False, encoding='utf-8')
+    if total_processed == 0:
+        logger.error("No valid messages found in input file!")
+        return
 
-    logger.info(f"Successfully saved {len(records)} results to {args.output_file}")
+    logger.info(f"Successfully processed {total_processed} messages in {batch_count} batches")
 
 
 if __name__ == '__main__':
