@@ -85,6 +85,46 @@ def _extract_query_from_messages(messages: List[Dict[str, Any]]) -> str:
     return str(messages[-1].get("content", "")) if messages else ""
 
 
+def _clean_and_parse_answer(answer: str) -> List[str]:
+    """Clean answer by removing <think> tags and parse as JSON list. Return [] if not a valid list."""
+    if not answer:
+        return []
+    
+    # Remove <think>...</think> tags (case insensitive, multiline)
+    import re
+    cleaned = re.sub(r'<think>.*?</think>', '', answer, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = cleaned.strip()
+    
+    if not cleaned:
+        return []
+    
+    # Try JSON parsing first
+    try:
+        import json
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, list):
+            # Convert all items to strings
+            return [str(item) for item in parsed if item is not None]
+        else:
+            # Not a list, discard
+            return []
+    except (json.JSONDecodeError, ValueError):
+        pass
+    
+    # Try eval as fallback (for Python list syntax)
+    try:
+        parsed = eval(cleaned)
+        if isinstance(parsed, list):
+            # Convert all items to strings
+            return [str(item) for item in parsed if item is not None]
+        else:
+            # Not a list, discard
+            return []
+    except Exception:
+        # Cannot parse as list, discard
+        return []
+
+
 def _run_single_deepconf(messages: List[Dict[str, Any]],
                          warmup_traces: int,
                          total_budget: int,
@@ -167,29 +207,31 @@ def _run_single_deepconf(messages: List[Dict[str, Any]],
         logger.debug("Skipping final phase (no remaining budget)")
 
     # Aggregate answers (unique, preserve first-seen order)
-    unique_answers = []
+    all_answer_items = []
     seen = set()
 
-    def _maybe_add(answer: str):
+    def _maybe_add_items(answer: str):
         if answer is None:
             return
-        s = str(answer)
-        if s not in seen:
-            seen.add(s)
-            unique_answers.append(s)
+        # Clean and parse answer into list of items
+        items = _clean_and_parse_answer(answer)
+        for item in items:
+            if item and item not in seen:
+                seen.add(item)
+                all_answer_items.append(item)
 
     for t in warmup_trace_list:
         if t["min_conf"] >= conf_bar:
-            _maybe_add(t["text"])
+            _maybe_add_items(t["text"])
 
     for t in final_traces:
         if t["min_conf"] >= conf_bar:
-            _maybe_add(t["text"])
+            _maybe_add_items(t["text"])
 
-    logger.debug(f"Query completed: {len(unique_answers)} unique answers aggregated")
+    logger.debug(f"Query completed: {len(all_answer_items)} unique answer items aggregated")
     return {
         "query": query,
-        "answer_list": unique_answers,
+        "answer_list": all_answer_items,
     }
 
 
