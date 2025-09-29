@@ -1,5 +1,6 @@
 import openai
 import numpy as np
+import logging
 from typing import List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -19,6 +20,13 @@ WARMUP_TRACES = 8
 TOTAL_BUDGET = 16
 CONFIDENCE_PERCENTILE = 50
 WINDOW_SIZE = 32
+
+# Setup logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 # ===========================
@@ -79,6 +87,9 @@ def _run_single_deepconf(messages: List[Dict[str, Any]],
                          total_budget: int,
                          confidence_percentile: int) -> Dict[str, Any]:
     """Run deepconf inference for a single messages list and aggregate unique answers."""
+    query = _extract_query_from_messages(messages)
+    logger.debug(f"Starting inference for query: {query[:100]}...")
+    
     # Initialize client
     client = openai.OpenAI(
         api_key="None",
@@ -99,7 +110,12 @@ def _run_single_deepconf(messages: List[Dict[str, Any]],
         "extra_body": {"top_k": TOP_K},
     }
 
-    responses = client.chat.completions.create(**warmup_request_params)
+    try:
+        responses = client.chat.completions.create(**warmup_request_params)
+        logger.debug(f"Warmup phase completed, got {len(responses.choices)} traces")
+    except Exception as e:
+        logger.error(f"Warmup request failed: {e}")
+        return {"query": query, "answer_list": []}
 
     warmup_trace_list = []
     min_confs = []
@@ -110,6 +126,7 @@ def _run_single_deepconf(messages: List[Dict[str, Any]],
 
     # Confidence bar
     conf_bar = float(np.percentile(min_confs, confidence_percentile)) if min_confs else 0.0
+    logger.debug(f"Confidence bar set to {conf_bar:.4f} (P{confidence_percentile})")
 
     # FINAL with early stopping enabled via threshold
     real_gen = max(0, total_budget - warmup_traces)
@@ -132,13 +149,19 @@ def _run_single_deepconf(messages: List[Dict[str, Any]],
                 }
             }
         }
-        responses = client.chat.completions.create(**final_request_params)
-        final_traces = []
-        for j in range(len(responses.choices)):
-            trace_data = _process_trace(responses.choices[j], warmup_traces + j)
-            final_traces.append(trace_data)
+        try:
+            responses = client.chat.completions.create(**final_request_params)
+            logger.debug(f"Final phase completed, got {len(responses.choices)} traces (requested {real_gen})")
+            final_traces = []
+            for j in range(len(responses.choices)):
+                trace_data = _process_trace(responses.choices[j], warmup_traces + j)
+                final_traces.append(trace_data)
+        except Exception as e:
+            logger.error(f"Final request failed: {e}")
+            final_traces = []
     else:
         final_traces = []
+        logger.debug("Skipping final phase (no remaining budget)")
 
     # Aggregate answers (unique, preserve first-seen order)
     unique_answers = []
@@ -160,8 +183,9 @@ def _run_single_deepconf(messages: List[Dict[str, Any]],
         if t["min_conf"] >= conf_bar:
             _maybe_add(t["text"])
 
+    logger.debug(f"Query completed: {len(unique_answers)} unique answers aggregated")
     return {
-        "query": _extract_query_from_messages(messages),
+        "query": query,
         "answer_list": unique_answers,
     }
 
@@ -189,8 +213,11 @@ def qsite_infer_deepconf(messages_list: List[List[Dict[str, Any]]],
             - answer_list: unique aggregated answers (no voting)
     """
 
+    logger.info(f"Starting batch inference for {len(messages_list)} queries with max_workers={max_workers}")
+    
     # High concurrency while preserving order
     results: List[Dict[str, Any]] = [None] * len(messages_list)
+    completed_count = 0
 
     def _task(idx: int, msgs: List[Dict[str, Any]]):
         return idx, _run_single_deepconf(msgs, warmup_traces, total_budget, confidence_percentile)
@@ -201,7 +228,11 @@ def qsite_infer_deepconf(messages_list: List[List[Dict[str, Any]]],
         for fut in as_completed(futures):
             idx, res = fut.result()
             results[idx] = res
+            completed_count += 1
+            if completed_count % 10 == 0 or completed_count == len(messages_list):
+                logger.info(f"Progress: {completed_count}/{len(messages_list)} queries completed")
 
+    logger.info("Batch inference completed")
     return results
 
 
@@ -256,12 +287,19 @@ def main():
                     continue
                 messages_list.append(msgs)
             except Exception as e:
-                print(f"Warning: Failed to parse line {idx + 1}: {e}")
+                logger.warning(f"Failed to parse line {idx + 1}: {e}")
                 continue
             if args.limit is not None and len(messages_list) >= args.limit:
                 break
 
-    print(f"Loaded {len(messages_list)} message sets. Starting inference...")
+    logger.info(f"Loaded {len(messages_list)} message sets from {args.input_file}")
+    if len(messages_list) == 0:
+        logger.error("No valid messages found in input file!")
+        return
+
+    logger.info(f"Configuration: model={MODEL_PATH}, port={PORT}, temp={TEMPERATURE}, "
+                f"top_p={TOP_P}, top_k={TOP_K}, warmup={args.warmup_traces}, "
+                f"budget={args.total_budget}, conf_pct={args.confidence_percentile}")
 
     results = qsite_infer_deepconf(
         messages_list=messages_list,
@@ -271,7 +309,7 @@ def main():
         max_workers=args.max_workers,
     )
 
-    print(f"Inference completed. Writing CSV to {args.output_file} ...")
+    logger.info(f"Writing results to CSV: {args.output_file}")
 
     # Convert to DataFrame
     records = []
@@ -283,7 +321,7 @@ def main():
     df = pd.DataFrame.from_records(records)
     df.to_csv(args.output_file, index=False, encoding='utf-8')
 
-    print("Done.")
+    logger.info(f"Successfully saved {len(records)} results to {args.output_file}")
 
 
 if __name__ == '__main__':
